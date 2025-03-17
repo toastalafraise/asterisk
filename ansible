@@ -1,0 +1,74 @@
+---
+- name: Install Asterisk 22.2.0
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install dependencies
+      apt:
+        name:
+          - wget
+          - build-essential
+          - subversion
+        state: present
+
+    - name: Download Asterisk source
+      get_url:
+        url: http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-22-current.tar.gz
+        dest: /usr/src/asterisk-22-current.tar.gz
+
+    - name: Extract Asterisk archive
+      unarchive:
+        src: /usr/src/asterisk-22-current.tar.gz
+        dest: /usr/src
+        remote_src: yes
+
+    - name: Run installation scripts
+      command: "{{ item }}"
+      args:
+        chdir: /usr/src/asterisk-22.*/
+      with_items:
+        - contrib/scripts/get_mp3_source.sh
+        - contrib/scripts/install_prereq install
+
+    - name: Configure and compile Asterisk
+      command: "{{ item }}"
+      args:
+        chdir: /usr/src/asterisk-22.*/
+      with_items:
+        - ./configure
+        - make
+        - make install
+        - make samples
+        - make config
+
+    - name: Create Asterisk user and group
+      user:
+        name: asterisk
+        system: yes
+        group: asterisk
+        create_home: no
+
+    - name: Set Asterisk ownership
+      file:
+        path: /var/lib/asterisk
+        owner: asterisk
+        group: asterisk
+        recurse: yes
+
+    - name: Enable and start Asterisk service
+      systemd:
+        name: asterisk
+        enabled: yes
+        state: started
+
+    - name: Open firewall ports
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+      with_items:
+        - "5060/udp"
+        - "10000:20000/udp"
